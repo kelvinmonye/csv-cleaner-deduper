@@ -1,16 +1,25 @@
-from typing import List, Dict, Any
+from typing import List
 import pandas as pd
+
+
+def _is_empty(value) -> bool:
+    """True if value is None/NaN/empty string after stripping."""
+    if value is None:
+        return True
+    try:
+        if pd.isna(value):
+            return True
+    except Exception:
+        # Some objects don't play nicely with pd.isna
+        pass
+    return str(value).strip() == ""
 
 
 def _count_non_empty(row: pd.Series) -> int:
     """How complete is this row? More non-empty values = better."""
     score = 0
     for v in row.values:
-        if v is None:
-            continue
-        if isinstance(v, float) and pd.isna(v):
-            continue
-        if str(v).strip() != "":
+        if not _is_empty(v):
             score += 1
     return score
 
@@ -22,12 +31,20 @@ def build_dedupe_key(row: pd.Series) -> str:
       1) name + phone
       2) name + email
       3) name + website
-      4) name only (last resort; can be risky)
+      4) name + city + state (fallback)
+      5) no_name rows should NOT merge together
     """
     name = str(row.get("name", "")).strip().lower()
     phone = str(row.get("phone", "")).strip()
     email = str(row.get("email", "")).strip().lower()
     website = str(row.get("website", "")).strip().lower()
+    city = str(row.get("city", "")).strip().lower()
+    state = str(row.get("state", "")).strip().lower()
+
+    # Safety: if there's no name, do NOT dedupe (avoid accidental merging)
+    if not name:
+        # include index-like uniqueness using some content to avoid mass merging
+        return f"no_name|{phone}|{email}|{website}|{city}|{state}"
 
     if name and phone:
         return f"{name}|phone:{phone}"
@@ -35,13 +52,18 @@ def build_dedupe_key(row: pd.Series) -> str:
         return f"{name}|email:{email}"
     if name and website:
         return f"{name}|web:{website}"
-    return f"{name}|fallback"
+
+    if name and city and state:
+        return f"{name}|loc:{city},{state}"
+
+    return f"{name}|fallback:{city}:{state}"
 
 
 def dedupe_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """
     Group rows by dedupe_key and keep the best record in each group.
     "Best" = most complete row (highest non-empty count).
+    Then merge: fill missing values in best row from other rows in the group.
     """
     if df.empty:
         return df.copy()
@@ -62,10 +84,11 @@ def dedupe_dataframe(df: pd.DataFrame) -> pd.DataFrame:
             for col in df.columns:
                 if col == "dedupe_key":
                     continue
+
                 current = best_row.get(col, "")
                 incoming = other.get(col, "")
 
-                if (str(current).strip() == "" or pd.isna(current)) and str(incoming).strip() != "" and not pd.isna(incoming):
+                if _is_empty(current) and not _is_empty(incoming):
                     best_row[col] = incoming
 
         kept_rows.append(best_row)
