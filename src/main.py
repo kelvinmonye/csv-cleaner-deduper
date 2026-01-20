@@ -3,6 +3,8 @@ import pandas as pd
 from cleaner.config import COLUMN_ALIASES
 from cleaner.normalize import normalize_columns
 from cleaner.fields import normalize_email, normalize_phone, normalize_website
+from cleaner.dedupe import dedupe_dataframe
+
 
 
 def main():
@@ -28,6 +30,15 @@ def main():
 
     if "website" in df.columns:
         df["website"] = df["website"].apply(normalize_website)
+
+    print("\nRows before dedupe:", len(df))
+
+df_deduped = dedupe_dataframe(df)
+
+print("Rows after dedupe:", len(df_deduped))
+print("\nDeduped preview:")
+print(df_deduped.head())
+
 
     print("\nFirst few rows (after cleaning):")
     print(df.head())
