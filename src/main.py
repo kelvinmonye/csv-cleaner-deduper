@@ -1,6 +1,9 @@
 import pandas as pd
+
 from cleaner.config import COLUMN_ALIASES
 from cleaner.normalize import normalize_columns
+from cleaner.fields import normalize_email, normalize_phone, normalize_website
+
 
 def main():
     print("CSV Cleaner & Deduper starting...")
@@ -10,13 +13,25 @@ def main():
     print("\nOriginal columns:")
     print(df.columns.tolist())
 
+    # 1) Normalize column names FIRST
     df.columns = normalize_columns(df.columns, COLUMN_ALIASES)
 
     print("\nNormalized columns:")
     print(df.columns.tolist())
 
-    print("\nFirst few rows:")
+    # 2) Normalize field values AFTER columns are standardized
+    if "email" in df.columns:
+        df["email"] = df["email"].apply(normalize_email)
+
+    if "phone" in df.columns:
+        df["phone"] = df["phone"].apply(normalize_phone)
+
+    if "website" in df.columns:
+        df["website"] = df["website"].apply(normalize_website)
+
+    print("\nFirst few rows (after cleaning):")
     print(df.head())
+
 
 if __name__ == "__main__":
     main()
